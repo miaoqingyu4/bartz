@@ -34,14 +34,21 @@ CUDA_VERSION = $(shell nvidia-smi 2>/dev/null | grep -o 'CUDA Version: [0-9]*' |
 EXTRAS = $(if $(filter 12 13,$(CUDA_VERSION)),--extra=cuda$(CUDA_VERSION),)
 UV_RUN = uv run --dev $(EXTRAS)
 
-# Anchor all date-based dependency policies (oldest pins and the latest-deps
-# lock) to the start of the current UTC day, as an explicit RFC 3339 instant so
-# uv's --exclude-newer and the config scripts resolve the same absolute cutoff
-# regardless of the runner's local timezone (uv reads a bare YYYY-MM-DD as local
-# midnight). Repeated `make release` runs on the same UTC day resolve
-# identically; crossing into the next UTC day may introduce one fresh bump. `:=`
-# samples the date once per make invocation.
+# Anchor all date-based dependency and release policies to the start of the
+# current UTC day, as an explicit RFC 3339 instant so uv's --exclude-newer and
+# the config scripts resolve the same absolute cutoff regardless of the runner's
+# local timezone (uv reads a bare YYYY-MM-DD as local midnight). Repeated
+# `make release` runs on the same UTC day resolve identically; crossing into the
+# next UTC day may introduce one fresh bump. `:=` samples the date once per make
+# invocation.
 TODAY := $(shell date -u +%Y-%m-%dT00:00:00Z)
+
+# Cutoff for the latest-deps lock: TODAY minus a 1-week cooldown, so releases
+# skip just-published versions. This restores pyproject's `exclude-newer =
+# '1 week'`, which a bare --exclude-newer on the `uv lock` command line would
+# otherwise override. Anchored to a UTC day boundary like TODAY for reproducible
+# same-day runs. GNU date first (Linux/CI), BSD date fallback (macOS).
+LOCK_CUTOFF := $(shell date -u -d '7 days ago' +%Y-%m-%dT00:00:00Z 2>/dev/null || date -u -v-7d +%Y-%m-%dT00:00:00Z)
 
 # define command to run python with oldest supported dependencies
 # OLD_DATE / OLD_DELAY_DAYS / BUMP_PYTHON_VERSION_DATE / NUM_SUPPORTED_PYTHON_RELEASES
@@ -291,15 +298,15 @@ diffcov:
 
 # `update-deps` = latest python deps (uv) + everything else (renv, pre-commit).
 # Only `update-python-deps` runs inside `release`: uv can pin resolution to a
-# date (TODAY, the current UTC day start), so repeated same-day release runs don't
-# churn. renv and pre-commit have no date knob, so they're bumped once by hand
-# via `make update-deps` at the start of the release, outside the release loop.
+# fixed date (LOCK_CUTOFF), so repeated same-day release runs don't churn. renv
+# and pre-commit have no date knob, so they're bumped once by hand via
+# `make update-deps` at the start of the release, outside the release loop.
 .PHONY: update-deps
 update-deps: update-python-deps update-other-deps
 
 .PHONY: update-python-deps
 update-python-deps:
-	uv lock --upgrade --exclude-newer=$(TODAY)
+	uv lock --upgrade --exclude-newer=$(LOCK_CUTOFF)
 
 .PHONY: update-other-deps
 update-other-deps:
@@ -318,7 +325,7 @@ update-other-deps:
 update-oldest-deps:
 	$(UV_RUN) python config/update_python_version.py --bump-date=$(BUMP_PYTHON_VERSION_DATE) --num-supported=$(NUM_SUPPORTED_PYTHON_RELEASES) --today=$(TODAY)
 	$(UV_RUN) python config/update_oldest_deps.py --min-old-date=$(OLD_DATE) --delay-days=$(OLD_DELAY_DAYS) --today=$(TODAY)
-	uv lock --exclude-newer=$(TODAY)
+	uv lock --exclude-newer=$(LOCK_CUTOFF)
 
 
 ################# RELEASE #################
@@ -330,7 +337,7 @@ check-committed:
 
 .PHONY: check-changelog
 check-changelog:
-	$(UV_RUN) python config/util.py check_changelog
+	$(UV_RUN) python config/util.py check_changelog --today=$(TODAY)
 
 .PHONY: build
 build:
@@ -404,7 +411,7 @@ upload-test: version-tag check-dist smoke-test
 
 .PHONY: gh-release
 gh-release: push-tag
-	$(UV_RUN) python config/util.py gh_release
+	$(UV_RUN) python config/util.py gh_release --today=$(TODAY)
 
 
 ################# BENCHMARKS #################
