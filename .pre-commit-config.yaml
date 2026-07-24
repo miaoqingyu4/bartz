@@ -45,7 +45,7 @@ repos:
         # an explicit `pre-commit run --files`
         exclude: src/bartz/_version\.py$
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: 2700fd5671c633760d912769c041bfcde2b9a01b  # frozen: v0.15.22
+    rev: cb8c523fd4835aba42af70f4cad5568db4df0b6c  # frozen: v0.16.0
     hooks:
       - id: ruff-check
         args: [--fix]
@@ -63,7 +63,7 @@ repos:
     hooks:
       - id: pydoclint
   - repo: https://github.com/henryiii/validate-pyproject-schema-store
-    # pinned (see PRECOMMIT_PINNED in Makefile): 2026.07.20 ships a uv.json
+    # pinned: 2026.07.20 ships a uv.json
     # schema that crashes validate-pyproject's generated validator
     # (UnboundLocalError: data_keys); unpin once a later release validates
     # our pyproject.toml cleanly
@@ -75,7 +75,7 @@ repos:
     hooks:
       - id: gitlint # this is already defined to run in stage commit-msg
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 69e5d7b46d7a93b633431a498a46cf3a8a2181f4  # frozen: 0.11.31
+    rev: e3e6ef7d9bda544b2e795782dbd7d2a4fbd7eb6d  # frozen: 0.11.32
     hooks:
       - id: uv-lock
   - repo: https://github.com/rhysd/actionlint

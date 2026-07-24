@@ -34,10 +34,25 @@ CUDA_VERSION = $(shell nvidia-smi 2>/dev/null | grep -o 'CUDA Version: [0-9]*' |
 EXTRAS = $(if $(filter 12 13,$(CUDA_VERSION)),--extra=cuda$(CUDA_VERSION),)
 UV_RUN = uv run --dev $(EXTRAS)
 
+# Anchor all date-based dependency and release policies to the start of the
+# current UTC day, as an explicit RFC 3339 instant so the config scripts resolve
+# the same absolute cutoff regardless of the runner's local timezone. Repeated
+# `make release` runs on the same UTC day resolve identically; crossing into the
+# next UTC day may introduce one fresh bump. `:=` samples the date once per make
+# invocation.
+TODAY := $(shell date -u +%Y-%m-%dT00:00:00Z)
+
+# Dependency cooldown: `update-python-deps` pins pyproject's `[tool.uv]
+# exclude-newer` to TODAY minus this many days, so releases skip just-published
+# versions. It is pinned to an absolute instant (not uv's relative `1 week` span)
+# so the release lock and the uv-lock pre-commit hook resolve the same cutoff and
+# don't churn uv.lock.
+COOLDOWN_DAYS = 7
+
 # define command to run python with oldest supported dependencies
 # OLD_DATE / OLD_DELAY_DAYS / BUMP_PYTHON_VERSION_DATE / NUM_SUPPORTED_PYTHON_RELEASES
 # drive the `update-oldest-deps` policy.
-OLD_DATE = 2025-07-23
+OLD_DATE = 2025-07-24T00:00:00Z
 OLD_DELAY_DAYS = 365
 BUMP_PYTHON_VERSION_DATE = 10-31
 NUM_SUPPORTED_PYTHON_RELEASES = 5
@@ -68,7 +83,9 @@ help:
 	@echo "- covreport: build html coverage report"
 	@echo "- covcheck: check coverage is above some thresholds"
 	@echo "- diffcov: check changed-lines coverage vs DIFF_BASE (default origin/main)"
-	@echo "- update-deps: upgrade uv.lock and renv.lock, update pre-commit hooks"
+	@echo "- update-deps: update-python-deps + update-other-deps"
+	@echo "- update-python-deps: pin the dep cooldown, then upgrade uv.lock to the latest allowed deps"
+	@echo "- update-other-deps: upgrade renv.lock and pre-commit hooks (not date-pinned)"
 	@echo "- update-oldest-deps: advance OLD_DATE and refresh oldest-supported pins in pyproject.toml"
 	@echo "- check-committed: verify there are no uncommitted changes"
 	@echo "- check-changelog: verify the topmost changelog section is dated today"
@@ -92,6 +109,7 @@ help:
 	@echo
 	@echo "Release workflow:"
 	@echo "- describe release in docs/changelog.md (its topmost header sets the version, follow effver https://jacobtomlinson.dev/effver)"
+	@echo "- $$ make update-deps"
 	@echo "- $$ make release, will not release but runs all tests, iterate and debug"
 	@echo '- run `make tests-gpu` on a gpu'
 	@echo "- merge a PR with the changes and fixes"
@@ -277,28 +295,37 @@ diffcov:
 
 ################# DEPENDENCIES #################
 
-# pre-commit repos excluded from `update-deps` autoupdate; each pinned rev in
-# .pre-commit-config.yaml carries a comment with the reason and unpin condition
-PRECOMMIT_PINNED = https://github.com/henryiii/validate-pyproject-schema-store
-
+# `update-deps` = latest python deps (uv) + everything else (renv, pre-commit).
+# Only `update-python-deps` runs inside `release`: it pins pyproject's
+# exclude-newer to a fixed instant before locking, so repeated same-day release
+# runs (and the uv-lock hook) resolve identically and don't churn. renv and
+# pre-commit have no date knob, so they're bumped once by hand via
+# `make update-deps` at the start of the release, outside the release loop.
 .PHONY: update-deps
-update-deps:
+update-deps: update-python-deps update-other-deps
+
+.PHONY: update-python-deps
+update-python-deps:
+	$(UV_RUN) python config/update_cooldown.py --today=$(TODAY) --cooldown-days=$(COOLDOWN_DAYS)
 	uv lock --upgrade
+
+.PHONY: update-other-deps
+update-other-deps:
 	# Update R packages to their latest versions and rewrite renv.lock; snapshot
 	# captures the refreshed library (explicit type, from DESCRIPTION). renv's
 	# installer reports build failures without raising an R error, so re-check:
 	# update(check = TRUE) returns TRUE only when nothing is left to update,
 	# and status() that the library and lockfile agree.
 	Rscript -e 'renv::update(prompt = FALSE); renv::snapshot(prompt = FALSE); stopifnot(isTRUE(renv::update(check = TRUE)), renv::status()$$synchronized)'
-	# --freeze keeps revs pinned to commit SHAs (tags are mutable); autoupdate
-	# has no exclude flag, so repos in PRECOMMIT_PINNED are kept back by
-	# passing every other remote repo with --repo
-	$(UV_RUN) pre-commit autoupdate --freeze $$($(UV_RUN) python -c "import sys, yaml; print(' '.join('--repo ' + r['repo'] for r in yaml.safe_load(open('.pre-commit-config.yaml'))['repos'] if r['repo'] not in ('local', 'meta', *sys.argv[1:])))" $(PRECOMMIT_PINNED))
+	# --freeze pins revs to commit SHAs (tags are mutable). A hook held back for
+	# compatibility (see its note in .pre-commit-config.yaml) is re-pinned by
+	# reverting the hunk by hand; this runs once per release, so no automation.
+	$(UV_RUN) pre-commit autoupdate --freeze
 
 .PHONY: update-oldest-deps
 update-oldest-deps:
-	$(UV_RUN) python config/update_python_version.py --bump-date=$(BUMP_PYTHON_VERSION_DATE) --num-supported=$(NUM_SUPPORTED_PYTHON_RELEASES)
-	$(UV_RUN) python config/update_oldest_deps.py --min-old-date=$(OLD_DATE) --delay-days=$(OLD_DELAY_DAYS)
+	$(UV_RUN) python config/update_python_version.py --bump-date=$(BUMP_PYTHON_VERSION_DATE) --num-supported=$(NUM_SUPPORTED_PYTHON_RELEASES) --today=$(TODAY)
+	$(UV_RUN) python config/update_oldest_deps.py --min-old-date=$(OLD_DATE) --delay-days=$(OLD_DELAY_DAYS) --today=$(TODAY)
 	uv lock
 
 
@@ -311,7 +338,7 @@ check-committed:
 
 .PHONY: check-changelog
 check-changelog:
-	$(UV_RUN) python config/util.py check_changelog
+	$(UV_RUN) python config/util.py check_changelog --today=$(TODAY)
 
 .PHONY: build
 build:
@@ -325,7 +352,7 @@ build:
 # artifacts pass `check-dist` and `smoke-test`, to avoid editing a published
 # tag if something fails in between.
 .PHONY: release
-release: check-changelog clean setup update-oldest-deps update-deps check-committed tests tests-single-cpu tests-old docs version-tag build upload gh-release
+release: check-changelog clean setup update-oldest-deps update-python-deps check-committed tests tests-single-cpu tests-old docs version-tag build upload gh-release
 	@echo "Done!"
 
 .PHONY: version-tag
@@ -385,7 +412,7 @@ upload-test: version-tag check-dist smoke-test
 
 .PHONY: gh-release
 gh-release: push-tag
-	$(UV_RUN) python config/util.py gh_release
+	$(UV_RUN) python config/util.py gh_release --today=$(TODAY)
 
 
 ################# BENCHMARKS #################

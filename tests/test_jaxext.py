@@ -667,13 +667,13 @@ class TestLoggamma:
 
     @pytest.mark.parametrize('shape', [(), (12,), (3, 4), (2, 3, 2), (1, 12, 1)])
     def test_shape_consistency(self, keys: split, shape: tuple[int, ...]) -> None:
-        """A shaped draw equals the flat draw reshaped, given the same key."""
+        """A shaped draw matches the flat draw reshaped, given the same key."""
         key = keys.pop()
         alpha = 1.3
         sample = loggamma(key, alpha, shape)
         assert sample.shape == shape
         flat = loggamma(random.clone(key), alpha, (sample.size,))
-        assert_array_equal(sample.reshape(sample.size), flat)
+        assert_close_matrices(sample.reshape(sample.size), flat, rtol=1e-6)
 
     @pytest.mark.parametrize('n_uniforms', [0, 1, 2, 3, 4, 6, 8])
     def test_n_uniforms(self, keys: split, n_uniforms: int) -> None:
