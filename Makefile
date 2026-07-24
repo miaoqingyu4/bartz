@@ -34,6 +34,13 @@ CUDA_VERSION = $(shell nvidia-smi 2>/dev/null | grep -o 'CUDA Version: [0-9]*' |
 EXTRAS = $(if $(filter 12 13,$(CUDA_VERSION)),--extra=cuda$(CUDA_VERSION),)
 UV_RUN = uv run --dev $(EXTRAS)
 
+# Anchor all date-based dependency policies (oldest pins and the latest-deps
+# lock) to the start of the current UTC day, so repeated `make release` runs on
+# the same day resolve identically and don't churn versions mid-release.
+# Crossing into the next UTC day may introduce one fresh bump. `:=` samples the
+# date once per make invocation.
+TODAY := $(shell date -u +%Y-%m-%d)
+
 # define command to run python with oldest supported dependencies
 # OLD_DATE / OLD_DELAY_DAYS / BUMP_PYTHON_VERSION_DATE / NUM_SUPPORTED_PYTHON_RELEASES
 # drive the `update-oldest-deps` policy.
@@ -68,7 +75,9 @@ help:
 	@echo "- covreport: build html coverage report"
 	@echo "- covcheck: check coverage is above some thresholds"
 	@echo "- diffcov: check changed-lines coverage vs DIFF_BASE (default origin/main)"
-	@echo "- update-deps: upgrade uv.lock and renv.lock, update pre-commit hooks"
+	@echo "- update-deps: update-python-deps + update-other-deps"
+	@echo "- update-python-deps: upgrade uv.lock to the latest deps as of last UTC midnight"
+	@echo "- update-other-deps: upgrade renv.lock and pre-commit hooks (not date-pinned)"
 	@echo "- update-oldest-deps: advance OLD_DATE and refresh oldest-supported pins in pyproject.toml"
 	@echo "- check-committed: verify there are no uncommitted changes"
 	@echo "- check-changelog: verify the topmost changelog section is dated today"
@@ -92,6 +101,7 @@ help:
 	@echo
 	@echo "Release workflow:"
 	@echo "- describe release in docs/changelog.md (its topmost header sets the version, follow effver https://jacobtomlinson.dev/effver)"
+	@echo "- $$ make update-deps"
 	@echo "- $$ make release, will not release but runs all tests, iterate and debug"
 	@echo '- run `make tests-gpu` on a gpu'
 	@echo "- merge a PR with the changes and fixes"
@@ -277,29 +287,36 @@ diffcov:
 
 ################# DEPENDENCIES #################
 
-# pre-commit repos excluded from `update-deps` autoupdate; each pinned rev in
-# .pre-commit-config.yaml carries a comment with the reason and unpin condition
-PRECOMMIT_PINNED = https://github.com/henryiii/validate-pyproject-schema-store
-
+# `update-deps` = latest python deps (uv) + everything else (renv, pre-commit).
+# Only `update-python-deps` runs inside `release`: uv can pin resolution to a
+# date (TODAY = last UTC midnight), so repeated same-day release runs don't
+# churn. renv and pre-commit have no date knob, so they're bumped once by hand
+# via `make update-deps` at the start of the release, outside the release loop.
 .PHONY: update-deps
-update-deps:
-	uv lock --upgrade
+update-deps: update-python-deps update-other-deps
+
+.PHONY: update-python-deps
+update-python-deps:
+	uv lock --upgrade --exclude-newer=$(TODAY)
+
+.PHONY: update-other-deps
+update-other-deps:
 	# Update R packages to their latest versions and rewrite renv.lock; snapshot
 	# captures the refreshed library (explicit type, from DESCRIPTION). renv's
 	# installer reports build failures without raising an R error, so re-check:
 	# update(check = TRUE) returns TRUE only when nothing is left to update,
 	# and status() that the library and lockfile agree.
 	Rscript -e 'renv::update(prompt = FALSE); renv::snapshot(prompt = FALSE); stopifnot(isTRUE(renv::update(check = TRUE)), renv::status()$$synchronized)'
-	# --freeze keeps revs pinned to commit SHAs (tags are mutable); autoupdate
-	# has no exclude flag, so repos in PRECOMMIT_PINNED are kept back by
-	# passing every other remote repo with --repo
-	$(UV_RUN) pre-commit autoupdate --freeze $$($(UV_RUN) python -c "import sys, yaml; print(' '.join('--repo ' + r['repo'] for r in yaml.safe_load(open('.pre-commit-config.yaml'))['repos'] if r['repo'] not in ('local', 'meta', *sys.argv[1:])))" $(PRECOMMIT_PINNED))
+	# --freeze pins revs to commit SHAs (tags are mutable). A hook held back for
+	# compatibility (see its note in .pre-commit-config.yaml) is re-pinned by
+	# reverting the hunk by hand; this runs once per release, so no automation.
+	$(UV_RUN) pre-commit autoupdate --freeze
 
 .PHONY: update-oldest-deps
 update-oldest-deps:
-	$(UV_RUN) python config/update_python_version.py --bump-date=$(BUMP_PYTHON_VERSION_DATE) --num-supported=$(NUM_SUPPORTED_PYTHON_RELEASES)
-	$(UV_RUN) python config/update_oldest_deps.py --min-old-date=$(OLD_DATE) --delay-days=$(OLD_DELAY_DAYS)
-	uv lock
+	$(UV_RUN) python config/update_python_version.py --bump-date=$(BUMP_PYTHON_VERSION_DATE) --num-supported=$(NUM_SUPPORTED_PYTHON_RELEASES) --today=$(TODAY)
+	$(UV_RUN) python config/update_oldest_deps.py --min-old-date=$(OLD_DATE) --delay-days=$(OLD_DELAY_DAYS) --today=$(TODAY)
+	uv lock --exclude-newer=$(TODAY)
 
 
 ################# RELEASE #################
@@ -325,7 +342,7 @@ build:
 # artifacts pass `check-dist` and `smoke-test`, to avoid editing a published
 # tag if something fails in between.
 .PHONY: release
-release: check-changelog clean setup update-oldest-deps update-deps check-committed tests tests-single-cpu tests-old docs version-tag build upload gh-release
+release: check-changelog clean setup update-oldest-deps update-python-deps check-committed tests tests-single-cpu tests-old docs version-tag build upload gh-release
 	@echo "Done!"
 
 .PHONY: version-tag

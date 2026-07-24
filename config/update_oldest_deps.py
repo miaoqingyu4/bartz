@@ -67,8 +67,9 @@ def parse_date(s: str) -> datetime.date:
     )
 
 
-def compute_old_date(min_old_date: datetime.date, delay_days: int) -> datetime.date:
-    today = datetime.datetime.now(tz=datetime.timezone.utc).date()
+def compute_old_date(
+    min_old_date: datetime.date, delay_days: int, today: datetime.date
+) -> datetime.date:
     return max(today - datetime.timedelta(days=delay_days), min_old_date)
 
 
@@ -256,12 +257,18 @@ def main() -> int:  # noqa: C901, PLR0915
     parser.add_argument(
         '--delay-days', required=True, type=int, help='Target lag behind today in days.'
     )
+    parser.add_argument(
+        '--today',
+        required=True,
+        type=parse_date,
+        help='YYYY-MM-DD; reference date for the policy.',
+    )
     parser.add_argument('--pyproject', type=Path, default=Path('pyproject.toml'))
     parser.add_argument('--makefile', type=Path, default=Path('Makefile'))
     parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args()
 
-    new_old_date = compute_old_date(args.min_old_date, args.delay_days)
+    new_old_date = compute_old_date(args.min_old_date, args.delay_days, args.today)
     print(f'OLD_DATE: {args.min_old_date.isoformat()} -> {new_old_date.isoformat()}')
 
     with args.pyproject.open('rb') as f:

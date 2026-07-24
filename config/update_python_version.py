@@ -61,6 +61,14 @@ def parse_bump_date(s: str) -> tuple[int, int]:
     return month, day
 
 
+def parse_date(s: str) -> datetime.date:
+    return (
+        datetime.datetime.strptime(s, '%Y-%m-%d')
+        .replace(tzinfo=datetime.timezone.utc)
+        .date()
+    )
+
+
 def compute_latest_minor(
     today: datetime.date, bump: tuple[int, int], anchor_year: int, anchor_latest: int
 ) -> int:
@@ -135,10 +143,16 @@ def main() -> int:
     parser.add_argument(
         '--python-version-file', type=Path, default=Path('.python-version')
     )
+    parser.add_argument(
+        '--today',
+        required=True,
+        type=parse_date,
+        help='YYYY-MM-DD; reference date for the policy.',
+    )
     parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args()
 
-    today = datetime.datetime.now(tz=datetime.timezone.utc).date()
+    today = args.today
     latest_minor = compute_latest_minor(
         today, args.bump_date, ANCHOR_YEAR, ANCHOR_LATEST_MINOR
     )
