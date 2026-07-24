@@ -35,16 +35,18 @@ EXTRAS = $(if $(filter 12 13,$(CUDA_VERSION)),--extra=cuda$(CUDA_VERSION),)
 UV_RUN = uv run --dev $(EXTRAS)
 
 # Anchor all date-based dependency policies (oldest pins and the latest-deps
-# lock) to the start of the current UTC day, so repeated `make release` runs on
-# the same day resolve identically and don't churn versions mid-release.
-# Crossing into the next UTC day may introduce one fresh bump. `:=` samples the
-# date once per make invocation.
-TODAY := $(shell date -u +%Y-%m-%d)
+# lock) to the start of the current UTC day, as an explicit RFC 3339 instant so
+# uv's --exclude-newer and the config scripts resolve the same absolute cutoff
+# regardless of the runner's local timezone (uv reads a bare YYYY-MM-DD as local
+# midnight). Repeated `make release` runs on the same UTC day resolve
+# identically; crossing into the next UTC day may introduce one fresh bump. `:=`
+# samples the date once per make invocation.
+TODAY := $(shell date -u +%Y-%m-%dT00:00:00Z)
 
 # define command to run python with oldest supported dependencies
 # OLD_DATE / OLD_DELAY_DAYS / BUMP_PYTHON_VERSION_DATE / NUM_SUPPORTED_PYTHON_RELEASES
 # drive the `update-oldest-deps` policy.
-OLD_DATE = 2025-07-23
+OLD_DATE = 2025-07-23T00:00:00Z
 OLD_DELAY_DAYS = 365
 BUMP_PYTHON_VERSION_DATE = 10-31
 NUM_SUPPORTED_PYTHON_RELEASES = 5
@@ -289,7 +291,7 @@ diffcov:
 
 # `update-deps` = latest python deps (uv) + everything else (renv, pre-commit).
 # Only `update-python-deps` runs inside `release`: uv can pin resolution to a
-# date (TODAY = last UTC midnight), so repeated same-day release runs don't
+# date (TODAY, the current UTC day start), so repeated same-day release runs don't
 # churn. renv and pre-commit have no date knob, so they're bumped once by hand
 # via `make update-deps` at the start of the release, outside the release loop.
 .PHONY: update-deps
