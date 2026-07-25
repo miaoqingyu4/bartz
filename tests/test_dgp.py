@@ -54,6 +54,7 @@ from bartz.testing import (
     SpikeSlab,
     Uniform,
     gen_data,
+    gen_params,
 )
 from bartz.testing._dgp import (
     generate_partition,
@@ -1171,12 +1172,26 @@ class TestOutcomeType:
 
 
 class TestOffset:
-    """Tests for the `offset` parameter of `gen_data`."""
+    """Tests for the `offset` parameter of `gen_data` and `gen_params`."""
 
     def test_default_is_zero(self, keys: split) -> None:
         """Without `offset`, `params.offset` is 0."""
         dgp = gen_data(keys.pop(), lambda_=0.5, **KWARGS)
         assert dgp.params.offset == 0.0
+
+    def test_default_in_gen_params(self, keys: split) -> None:
+        """`gen_params` accepts the default `offset` when called directly.
+
+        `gen_data` forwards `offset` to the jitted `gen_params`, so it is always
+        traced there; a direct call leaves the default an untraced Python float.
+        """
+        # gen_params takes no `n`, and `k=None` drops the `lambda_` requirement,
+        # so this passes only the arguments which have no default at all
+        kw: kwdict = dict(
+            {name: value for name, value in KWARGS.items() if name != 'n'}, k=None
+        )
+        params = gen_params(keys.pop(), **kw)
+        assert params.offset == 0.0
 
     @pytest.mark.parametrize(
         'offset',
