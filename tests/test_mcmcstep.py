@@ -2149,6 +2149,35 @@ def mcmcstep_data(mcmcstep_data_shape: tuple[int, int]) -> MCMCStepData:
     return MCMCStepData(X, y, max_split)
 
 
+@pytest.mark.parametrize('offset', [-30.0, 30.0])
+def test_z_finite_with_confident_misclassification(
+    keys: split, mcmcstep_data: MCMCStepData, offset: float
+) -> None:
+    """Check `step_z` stays finite when the latent is deep on the wrong side.
+
+    An offset which contradicts the outcome truncates the latent normal far into
+    a tail, where the inverse normal cdf overflows if not guarded.
+    """
+    X, y, max_split = mcmcstep_data
+    state = init(
+        X=X,
+        y=(y > 0).astype(jnp.float32),
+        outcome_type='binary',
+        offset=offset,
+        max_split=max_split,
+        num_trees=10,
+        p_nonterminal=jnp.array([0.9, 0.5]),
+        leaf_prior_cov_inv=1.0,
+    )
+
+    # `step_z` and not `step` because `step` is jitted, and whether xla flushes
+    # the subnormals which cause the overflow depends on how it fuses the ops
+    new_state = step_z(keys.pop(), state)
+
+    assert jnp.all(jnp.isfinite(nnone(new_state.z)))
+    assert jnp.all(jnp.isfinite(new_state.resid))
+
+
 def test_chol_with_gersh_disparate_scales() -> None:
     """Gershgorin stabilization is per-component, not a single global shift.
 

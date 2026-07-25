@@ -582,6 +582,48 @@ class TestTruncatedNormalOneSided:
             vals = loop_body(key)
             assert jnp.all(jnp.isfinite(vals))
 
+    @pytest.mark.parametrize('upper', [False, True])
+    def test_finite_extreme_bound(self, keys: split, upper: bool) -> None:
+        """Check that the outputs are finite for bounds deep into a tail.
+
+        Past |bound| ~ 11 the uniform to invert underflows, all the more on cpu
+        where xla flushes subnormals to zero.
+        """
+        nbounds = 30
+        nsamples = 100
+        bound = jnp.linspace(11, 40, nbounds)
+        bound = jnp.concatenate([-bound, bound])
+        x = truncated_normal_onesided(
+            keys.pop(), (2 * nbounds, nsamples), jnp.bool_(upper), bound[:, None]
+        )
+        assert jnp.all(jnp.isfinite(x))
+
+    @pytest.mark.parametrize('u', [0.0, 1 - 2**-24])
+    @pytest.mark.parametrize('upper', [False, True])
+    def test_finite_uniform_extremes(
+        self, keys: split, monkeypatch: pytest.MonkeyPatch, u: float, upper: bool
+    ) -> None:
+        """Check that the outputs are finite if the uniform sample is extreme.
+
+        `random.uniform` returns exactly 0 with probability 2**-23, and its
+        largest value is 1 - 2**-24, both too unlikely to be hit at random here.
+        """
+        monkeypatch.setattr(random, 'uniform', lambda _key, shape: jnp.full(shape, u))
+        nbounds = 100
+        bound = jnp.linspace(-40, 40, nbounds)
+        x = truncated_normal_onesided(keys.pop(), (nbounds,), jnp.bool_(upper), bound)
+        assert jnp.all(jnp.isfinite(x))
+
+    def test_saturation(self, keys: split) -> None:
+        """Check that a bound too extreme to invert saturates the sample.
+
+        The sample then falls short of the truncation region, but stays finite.
+        """
+        x = truncated_normal_onesided(keys.pop(), (), jnp.bool_(False), jnp.float32(30))
+        assert 12 < x < 14
+        x = truncated_normal_onesided(keys.pop(), (), jnp.bool_(True), jnp.float32(-30))
+        assert -14 < x < -12
+
 
 class TestLoggamma:
     """Test `_jaxext.random.loggamma`."""
