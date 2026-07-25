@@ -2150,13 +2150,14 @@ def mcmcstep_data(mcmcstep_data_shape: tuple[int, int]) -> MCMCStepData:
 
 
 @pytest.mark.parametrize('offset', [-30.0, 30.0])
-def test_z_finite_with_confident_misclassification(
+def test_z_valid_with_confident_misclassification(
     keys: split, mcmcstep_data: MCMCStepData, offset: float
 ) -> None:
-    """Check `step_z` stays finite when the latent is deep on the wrong side.
+    """Check `step_z` when the latent is deep on the wrong side.
 
     An offset which contradicts the outcome truncates the latent normal far into
-    a tail, where the inverse normal cdf overflows if not guarded.
+    a tail, where the inverse normal cdf overflows if not guarded, and where the
+    sample saturates short of the sign implied by the outcome if not clipped.
     """
     X, y, max_split = mcmcstep_data
     state = init(
@@ -2174,8 +2175,10 @@ def test_z_finite_with_confident_misclassification(
     # the subnormals which cause the overflow depends on how it fuses the ops
     new_state = step_z(keys.pop(), state)
 
-    assert jnp.all(jnp.isfinite(nnone(new_state.z)))
+    z = nnone(new_state.z)
+    assert jnp.all(jnp.isfinite(z))
     assert jnp.all(jnp.isfinite(new_state.resid))
+    assert jnp.all(jnp.where(new_state.y != 0, z >= 0, z <= 0))
 
 
 def test_chol_with_gersh_disparate_scales() -> None:

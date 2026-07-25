@@ -614,15 +614,30 @@ class TestTruncatedNormalOneSided:
         x = truncated_normal_onesided(keys.pop(), (nbounds,), jnp.bool_(upper), bound)
         assert jnp.all(jnp.isfinite(x))
 
-    def test_saturation(self, keys: split) -> None:
-        """Check that a bound too extreme to invert saturates the sample.
+    @pytest.mark.parametrize('upper', [False, True])
+    def test_within_truncation_region(self, keys: split, upper: bool) -> None:
+        """Check that the samples are on the side of the bound they should be."""
+        nbounds = 60
+        nsamples = 100
+        bound = jnp.linspace(-40, 40, nbounds)
+        x = truncated_normal_onesided(
+            keys.pop(), (nbounds, nsamples), jnp.bool_(upper), bound[:, None]
+        )
+        if upper:
+            assert jnp.all(x <= bound[:, None])
+        else:
+            assert jnp.all(x >= bound[:, None])
 
-        The sample then falls short of the truncation region, but stays finite.
+    def test_saturation(self, keys: split) -> None:
+        """Check that a bound too extreme to invert collapses the sample onto it.
+
+        The inversion saturates at |x| ~ 12.9 in float32, short of the truncation
+        region, so the sample is moved back onto the boundary.
         """
         x = truncated_normal_onesided(keys.pop(), (), jnp.bool_(False), jnp.float32(30))
-        assert 12 < x < 14
+        assert x == 30
         x = truncated_normal_onesided(keys.pop(), (), jnp.bool_(True), jnp.float32(-30))
-        assert -14 < x < -12
+        assert x == -30
 
 
 class TestLoggamma:
