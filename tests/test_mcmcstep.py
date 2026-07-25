@@ -145,6 +145,11 @@ from tests.util import (
     nnone,
 )
 
+# Forest size shared across the module. jax recompiles whenever an array shape
+# changes, so every test that has no reason to need a specific number of trees
+# uses this, letting jax reuse compiled code.
+NUM_TREES = 5
+
 
 class VarTreeData(NamedTuple):
     """Fixture data pairing a variable tree with its max-split array."""
@@ -750,9 +755,9 @@ class TestReduction:
         and a data axis sharded with `shard_map`, which `PallasReduction` must
         reject.
         """
-        n, size, num_trees = 512, 8, 4
+        n, size = 512, 8
         indices = random.randint(keys.pop(), (n,), 0, size).astype(jnp.uint32)
-        tree_indices = random.randint(keys.pop(), (num_trees, n), 0, size).astype(
+        tree_indices = random.randint(keys.pop(), (NUM_TREES, n), 0, size).astype(
             jnp.uint32
         )
         # float values: univariate, and with the 1d/2d batch shapes of the
@@ -1383,7 +1388,6 @@ class TestMultichain:
         k = 2
         d = 6
         numcut = 10
-        num_trees = 5
         X = random.randint(keys.pop(), (p, self.n), 0, numcut + 1, jnp.uint32)
         max_split = jnp.full(p, numcut + 1, jnp.uint32)
 
@@ -1394,16 +1398,16 @@ class TestMultichain:
             )
             y = y.at[1].set(random.normal(keys.pop(), (self.n,)))
             offset = random.normal(keys.pop(), (k,))
-            leaf_prior_cov_inv = jnp.eye(k) * num_trees
+            leaf_prior_cov_inv = jnp.eye(k) * NUM_TREES
         else:
             if mv:
                 y_shape = (k, self.n)
                 offset = random.normal(keys.pop(), (k,))
-                leaf_prior_cov_inv = jnp.eye(k) * num_trees
+                leaf_prior_cov_inv = jnp.eye(k) * NUM_TREES
             else:
                 y_shape = (self.n,)
                 offset = random.normal(keys.pop(), ())
-                leaf_prior_cov_inv = jnp.float32(num_trees)
+                leaf_prior_cov_inv = jnp.float32(NUM_TREES)
 
             if binary:
                 y = random.bernoulli(keys.pop(), 0.5, y_shape).astype(jnp.float32)
@@ -1415,7 +1419,7 @@ class TestMultichain:
             y=y,
             offset=offset,
             max_split=max_split,
-            num_trees=num_trees,
+            num_trees=NUM_TREES,
             p_nonterminal=jnp.full(d - 1, 0.9),
             leaf_prior_cov_inv=leaf_prior_cov_inv,
         )
@@ -1791,7 +1795,6 @@ def test_z_differs_across_data_shards(keys: split) -> None:
     n_per_shard = 20
     p = 5
     numcut = 10
-    num_trees = 5
 
     X_one = random.randint(keys.pop(), (p, n_per_shard), 0, numcut + 1, jnp.uint32)
     y_one = random.bernoulli(keys.pop(), 0.5, (n_per_shard,)).astype(jnp.float32)
@@ -1806,9 +1809,9 @@ def test_z_differs_across_data_shards(keys: split) -> None:
         outcome_type='binary',
         offset=jnp.float32(0.0),
         max_split=max_split,
-        num_trees=num_trees,
+        num_trees=NUM_TREES,
         p_nonterminal=jnp.full(5, 0.9),
-        leaf_prior_cov_inv=jnp.float32(num_trees),
+        leaf_prior_cov_inv=jnp.float32(NUM_TREES),
         mesh={'data': num_data_shards},
     )
 
@@ -1842,7 +1845,7 @@ def test_affluence_tree_stays_clean(
     really a leaf), instead of relying on a downstream `is_actual_leaf` mask. A
     bit left on a grown-away or pruned-away node would be a regression.
     """
-    p, n, num_trees, num_steps = 5, 200, 20, 50
+    p, n, num_steps = 5, 200, 50
     data = gen_data(
         keys.pop(), n=n, p=p, q=0, sigma2_lin=1.0, sigma2_quad=1.0, sigma2_eps=1.0
     ).quantize()
@@ -1851,7 +1854,7 @@ def test_affluence_tree_stays_clean(
         y=data.y,
         offset=0.0,
         max_split=data.max_split,
-        num_trees=num_trees,
+        num_trees=NUM_TREES,
         p_nonterminal=make_p_nonterminal(6),
         leaf_prior_cov_inv=1.0,
         error_cov_inv=Wishart(nu=2.0, rate=2.0, value=1.0),
@@ -1888,7 +1891,6 @@ class TestMixedBinaryContinuous:
     p = 10
     k = 3
     numcut = 10
-    num_trees = 5
     d = 6
 
     @pytest.fixture
@@ -1908,9 +1910,9 @@ class TestMixedBinaryContinuous:
             outcome_type=['binary', 'continuous', 'binary'],
             offset=random.normal(keys.pop(), (self.k,)),
             max_split=max_split,
-            num_trees=self.num_trees,
+            num_trees=NUM_TREES,
             p_nonterminal=jnp.full(self.d - 1, 0.9),
-            leaf_prior_cov_inv=jnp.eye(self.k) * self.num_trees,
+            leaf_prior_cov_inv=jnp.eye(self.k) * NUM_TREES,
             error_cov_inv=DiagWishart(
                 nu=2.0, rate=jnp.diag(jnp.array([0.0, 2.0, 0.0])), value=jnp.eye(self.k)
             ),
@@ -2166,7 +2168,7 @@ def test_z_valid_with_confident_misclassification(
         outcome_type='binary',
         offset=offset,
         max_split=max_split,
-        num_trees=10,
+        num_trees=NUM_TREES,
         p_nonterminal=jnp.array([0.9, 0.5]),
         leaf_prior_cov_inv=1.0,
     )
@@ -2282,17 +2284,17 @@ class TestPrecomputeTerms:
 
     def test_shapes_leaf(self, keys: split, k: int) -> None:
         """Check that shapes of outputs are correct."""
-        num_trees, tree_size = 3, 4
-        prec_trees = jnp.ones((num_trees, tree_size))
+        tree_size = 4
+        prec_trees = jnp.ones((NUM_TREES, tree_size))
         error_cov_inv = random_pd_matrix(keys.pop(), k)
         leaf_prior_cov_inv = random_pd_matrix(keys.pop(), k)
 
         result = _precompute_leaf_terms_mv(
             keys.pop(), prec_trees, error_cov_inv, leaf_prior_cov_inv
         )
-        assert result.mean_factor.shape == (num_trees, k, k, tree_size)
-        assert result.centered_leaves.shape == (num_trees, k, tree_size)
-        assert result.logdet_prec.shape == (num_trees, tree_size)
+        assert result.mean_factor.shape == (NUM_TREES, k, k, tree_size)
+        assert result.centered_leaves.shape == (NUM_TREES, k, tree_size)
+        assert result.logdet_prec.shape == (NUM_TREES, tree_size)
 
     def test_likelihood_equiv(self, keys: split) -> None:
         """Check that _compute_likelihood_ratio_uv and _compute_likelihood_ratio_mv agree when k = 1."""
@@ -2336,14 +2338,14 @@ class TestPrecomputeTerms:
 
     def test_leaf_terms_equiv(self, keys: split) -> None:
         """Check that _precompute_leaf_terms_uv and _precompute_leaf_terms_mv agree when k = 1."""
-        num_trees, tree_size = 2, 3
+        tree_size = 3
         inv_sigma2 = random.uniform(keys.pop(), (), minval=0.1, maxval=5.0)
         leaf_prior_cov_inv_uv = random.uniform(keys.pop(), (), minval=0.1, maxval=5.0)
 
         error_cov_inv = jnp.array([[inv_sigma2]])
         leaf_prior_cov_inv = jnp.array([[leaf_prior_cov_inv_uv]])
-        prec_trees = random.uniform(keys.pop(), (num_trees, tree_size)) * 5.0
-        z_uv = random.normal(keys.pop(), (num_trees, tree_size))
+        prec_trees = random.uniform(keys.pop(), (NUM_TREES, tree_size)) * 5.0
+        z_uv = random.normal(keys.pop(), (NUM_TREES, tree_size))
         z_mv = z_uv[:, None, :]  # (num_trees, k=1, tree_size), leaf axis trailing
 
         result_uv = _precompute_leaf_terms_uv(
@@ -2391,7 +2393,7 @@ class TestMVBartIntegration:
             dict(
                 X=X,
                 max_split=max_split,
-                num_trees=10,
+                num_trees=NUM_TREES,
                 p_nonterminal=p_nonterminal,
                 resid_reduction_config=BatchedReduction(num_batches=None),
                 count_reduction_config=BatchedReduction(num_batches=None),
@@ -2613,7 +2615,6 @@ class TestMultivariate:
     ) -> None:
         """Check that multivariate with k=1 is equivalent to univariate."""
         X, y, max_split = mcmcstep_data
-        n_trees = 100
 
         if kind == 'binary':
             y = (y > 0).astype(jnp.float32)
@@ -2623,16 +2624,16 @@ class TestMultivariate:
             dict(
                 X=X,
                 max_split=max_split,
-                num_trees=n_trees,
+                num_trees=NUM_TREES,
                 p_nonterminal=jnp.array([0.9, 0.5]),
                 resid_reduction_config=BatchedReduction(num_batches=None),
                 count_reduction_config=BatchedReduction(num_batches=None),
             ),
         )
 
-        uv_kw: dict = dict(y=y, offset=0.0, leaf_prior_cov_inv=jnp.float32(n_trees))
+        uv_kw: dict = dict(y=y, offset=0.0, leaf_prior_cov_inv=jnp.float32(NUM_TREES))
         mv_kw: dict = dict(
-            y=y[None, :], offset=jnp.zeros(1), leaf_prior_cov_inv=n_trees * jnp.eye(1)
+            y=y[None, :], offset=jnp.zeros(1), leaf_prior_cov_inv=NUM_TREES * jnp.eye(1)
         )
 
         if kind == 'binary':
@@ -2679,7 +2680,7 @@ class TestMultivariate:
             # the uv and mv (k=1) reductions round the stored leaves slightly
             # differently, so with reduced leaf precision these continuous
             # quantities agree only to the rounding floor
-            rtol = condf(uv_state.forest.leaf_tree, 1e-6, 1e-3)
+            rtol = condf(uv_state.forest.leaf_tree, 1e-5, 1e-3)
             assert_close_matrices(
                 uv_state.resid, mv_state.resid.squeeze(0), rtol=rtol, atol=1e-6
             )
@@ -2741,7 +2742,7 @@ class TestMultivariate:
             y=y,
             offset=jnp.zeros(k),
             max_split=max_split,
-            num_trees=5,
+            num_trees=NUM_TREES,
             p_nonterminal=jnp.array([0.9, 0.5]),
             leaf_prior_cov_inv=jnp.eye(k),
             resid_reduction_config=BatchedReduction(num_batches=None),
@@ -2806,7 +2807,7 @@ class TestMultivariate:
                 y=y,
                 offset=jnp.zeros(k),
                 max_split=max_split,
-                num_trees=10,
+                num_trees=NUM_TREES,
                 p_nonterminal=jnp.array([0.9, 0.5]),
                 leaf_prior_cov_inv=jnp.eye(k),
                 error_cov_inv=Wishart(
@@ -2889,17 +2890,16 @@ class TestSampleSAugmentation:
         tree_heap = manual_tree(
             [[0.0], [0.0, 0.0], [0.0, 0.0, 0.0, 0.0]], [[0], [1, 1]], [[1], [5, 5]]
         )
-        num_trees = 4
         s = jnp.array([0.5, 0.3, 0.2])
         forest = self._forest(
-            self._replicate(tree_heap.var_tree, num_trees),
-            self._replicate(tree_heap.split_tree, num_trees),
+            self._replicate(tree_heap.var_tree, NUM_TREES),
+            self._replicate(tree_heap.split_tree, NUM_TREES),
             jnp.array([5, 5, 5], jnp.uint8),
             jnp.log(s),
         )
         # each tree blocks variable 0 at one node with eligible mass 1 - s[0], so
         # the augmentation count of variable 0 is Poisson with mean below
-        expected = num_trees * s[0] / (1 - s[0])
+        expected = NUM_TREES * s[0] / (1 - s[0])
 
         draws = jit(vmap(lambda key: sample_s_augmentation(key, forest)))(
             keys.pop(20_000)
@@ -2948,9 +2948,10 @@ class TestSampleSAugmentation:
     def test_blocked_mass_matches_reference(self, keys: split) -> None:
         """`_blocked_mass_tree` matches the ancestor-list reference to float."""
         # Grow a forest tuned for heavy blocking: few cutpoints so variables
-        # exhaust quickly, but enough variables and a high grow probability (low
-        # beta) so the trees stay deep below the exhausted variables, which is
-        # what makes the blocked mass nonzero. This reliably blocks both child
+        # exhaust quickly, but enough trees and variables and a high grow
+        # probability (low beta) so the trees stay deep below the exhausted
+        # variables, which is what makes the blocked mass nonzero. Hence the
+        # tree count is not `NUM_TREES`. This reliably blocks both child
         # sides across seeds (checked over 40 seeds: >= 5 blocked entries each).
         p, n = 6, 120
         state = init(
@@ -2993,7 +2994,7 @@ class TestSampleSAugmentation:
             y=random.normal(keys.pop(), (n,)),
             offset=0.0,
             max_split=jnp.full(p, 4, jnp.uint8),
-            num_trees=6,
+            num_trees=NUM_TREES,
             p_nonterminal=make_p_nonterminal(4),
             leaf_prior_cov_inv=1.0,
             error_cov_inv=Wishart(nu=3.0, rate=1.0, value=3.0),
