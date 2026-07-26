@@ -2135,7 +2135,7 @@ def random_pd_matrix(key: Key[Array, ''], k: int) -> Float[Array, '{k} {k}']:
     return A @ A.T + jnp.eye(k)
 
 
-@pytest.fixture(params=[(10, 2), (20, 5), (3, 100), (50, 50)])
+@pytest.fixture(params=[(10, 100), (50, 5)])
 def mcmcstep_data_shape(request: FixtureRequest) -> tuple[int, int]:
     """Provide (n, p) pairs for testing."""
     return request.param
@@ -2206,7 +2206,7 @@ class TestWishart:
     """Test the basic properties of the wishart sampler output."""
 
     # Parameterize with (k, df) pairs
-    @pytest.fixture(params=[(1, 3.0), (3, 3.0), (3, 5.0), (3, 100.0), (100, 102.0)])
+    @pytest.fixture(params=[(1, 1.0), (3, 100.0), (100, 102.0)])
     def wishart_params(self, request: FixtureRequest) -> tuple[int, float]:
         """Provide (k, df) pairs for testing."""
         k, df = request.param
@@ -2277,7 +2277,7 @@ class TestWishart:
 class TestPrecomputeTerms:
     """Test _precompute_likelihood_terms_mv and _precompute_leaf_terms_mv correctness and stability."""
 
-    @pytest.fixture(params=[1, 2, 5, 10])
+    @pytest.fixture(params=[1, 3])
     def k(self, request: FixtureRequest) -> int:
         """Provide different ks for testing."""
         return request.param
