@@ -2145,9 +2145,15 @@ def mcmcstep_data_shape(request: FixtureRequest) -> tuple[int, int]:
 def mcmcstep_data(mcmcstep_data_shape: tuple[int, int]) -> MCMCStepData:
     """Generate a toy dataset."""
     n, p = mcmcstep_data_shape
-    X = jnp.arange(n * p, dtype=jnp.uint32).reshape(p, n)
+    numcut = 5
+    # bin the datapoint index into [0, numcut], rotating the phase per variable.
+    # Binning keeps every variable splittable, since values above the cutpoint
+    # range send all datapoints to the same child, and the rotation makes the
+    # variables differ while each stays correlated with `y`.
+    index = (jnp.arange(n) + jnp.arange(p)[:, None]) % n
+    X = (index * (numcut + 1) // n).astype(jnp.uint32)
     y = jnp.linspace(-1, 1, n)
-    max_split = jnp.full(p, 5, dtype=jnp.uint32)
+    max_split = jnp.full(p, numcut, jnp.uint32)
     return MCMCStepData(X, y, max_split)
 
 
@@ -2535,6 +2541,10 @@ class TestMVBartIntegration:
         resid_1d = random.normal(keys.pop(), (n,))
         mask = random.bernoulli(keys.pop(), 0.3, (n,))
         keep = ~mask
+        # guard against a silently vacuous test: if nothing is masked, or
+        # everything is, the two states compared below coincide
+        assert jnp.any(mask)
+        assert jnp.any(keep)
         inv_sdev = jnp.where(mask, 0.0, 1.0)
 
         df_prior = jnp.float32(20.0)
