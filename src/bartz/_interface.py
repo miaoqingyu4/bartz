@@ -828,6 +828,21 @@ class Bart(Module):
             return get_error_sdev(self._main_trace, self._binary_mask, mean=mean)
 
     @cached_property
+    def accept(
+        self,
+    ) -> (
+        Float32[Array, ' n_burn_plus_n_save']
+        | Float32[Array, 'num_chains n_burn_plus_n_save']
+    ):
+        """Fraction of trees with an accepted grow or prune move at each iteration.
+
+        Includes the burn-in iterations and does not concatenate the chains, to
+        allow checking convergence. The iterations thinned away by `n_skip` are
+        not recorded.
+        """
+        return get_accept(self._burnin_trace, self._main_trace, self.num_trees)
+
+    @cached_property
     def varcount(self) -> Int32[Array, 'ndpost p']:
         """Histogram of predictor usage for decision rules in the trees."""
         p = self._mcmc_state.forest.max_split.size
@@ -1592,6 +1607,26 @@ def get_latent_prec(
         (cont_indices,) = jnp.nonzero(mask, size=kc)
         prec = prec[..., cont_indices[:, None], cont_indices[None, :]]
     return prec
+
+
+@jit(static_argnames='num_trees')
+def get_accept(
+    burnin_trace: BurninTrace, main_trace: MainTrace, num_trees: int
+) -> (
+    Float32[Array, ' n_burn_plus_n_save']
+    | Float32[Array, 'num_chains n_burn_plus_n_save']
+):
+    """Fraction of trees with an accepted move, burn-in + main concatenated."""
+    sample_axis = trace_sample_axes(main_trace).grow_acc_count
+    acc = jnp.concatenate(
+        [
+            burnin_trace.grow_acc_count + burnin_trace.prune_acc_count,
+            main_trace.grow_acc_count + main_trace.prune_acc_count,
+        ],
+        axis=sample_axis,
+    )
+    acc = chain_to_axis(acc, chain_vmap_axes(main_trace).grow_acc_count)
+    return acc / num_trees
 
 
 @jit

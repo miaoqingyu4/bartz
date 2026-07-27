@@ -721,6 +721,10 @@ def test_output_shapes(kw: dict[str, Any]) -> None:
             assert nnone(bart.sigma).shape == (nskip + ndpost // mc_cores, mc_cores)
         assert nnone(bart.sigma_).shape == (ndpost,)
         assert nnone(bart.sigma_mean).shape == ()
+    if mc_cores == 1:
+        assert bart.accept.shape == (nskip + ndpost,)
+    else:
+        assert bart.accept.shape == (nskip + ndpost // mc_cores, mc_cores)
     assert bart.varcount.shape == (ndpost, p)
     assert bart.varcount_mean.shape == (p,)
     assert bart.varprob.shape == (ndpost, p)
@@ -754,6 +758,7 @@ def test_output_types(kw: dict[str, Any]) -> None:
         assert nnone(bart.sigma).dtype == jnp.float32
         assert nnone(bart.sigma_).dtype == jnp.float32
         assert nnone(bart.sigma_mean).dtype == jnp.float32
+    assert bart.accept.dtype == jnp.float32
     assert bart.varcount.dtype == jnp.int32
     assert bart.varcount_mean.dtype == jnp.float32
     assert bart.varprob.dtype == jnp.float32
