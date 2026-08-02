@@ -1373,13 +1373,15 @@ def test_output_shapes(bkw: BartKW, keys: split) -> None:
     assert bart.varprob.shape == (ndpost, bkw.p)
     assert bart.varprob_mean.shape == (bkw.p,)
 
-    # get_latent_prec shape
+    # traces that include the burn-in samples and keep the chains separate
     n_burn = kw['n_burn']
     prec = bart.get_latent_prec()
     if bkw.num_chains is not None:
         assert prec.shape == (bkw.num_chains, n_burn + bkw.n_save, *k, *k)
+        assert bart.accept.shape == (bkw.num_chains, n_burn + bkw.n_save)
     else:
         assert prec.shape == (n_burn + bkw.n_save, *k, *k)
+        assert bart.accept.shape == (n_burn + bkw.n_save,)
 
 
 def test_output_types(bkw: BartKW, keys: split) -> None:
@@ -1404,6 +1406,7 @@ def test_output_types(bkw: BartKW, keys: split) -> None:
     assert bart.varcount_mean.dtype == jnp.float32
     assert bart.varprob.dtype == jnp.float32
     assert bart.varprob_mean.dtype == jnp.float32
+    assert bart.accept.dtype == jnp.float32
 
     # also test the internal leaf dtype directly, since it's not reflected in
     # the public API anywhere. `Bart` overrides the `init` defaults with
@@ -1423,6 +1426,16 @@ def test_output_types(bkw: BartKW, keys: split) -> None:
     inv_sdev_scale = bart._mcmc_state.inv_sdev_scale
     if inv_sdev_scale is not None:
         assert inv_sdev_scale.dtype == prec_scale_dtype
+
+
+def test_accept(bkw: BartKW) -> None:
+    """`accept` is the per-iteration fraction of trees with an accepted move."""
+    bart = Bart(**bkw.kw)
+    counts = bart.accept * bart.num_trees
+    assert_close_matrices(counts, jnp.round(counts), rtol=1e-6)
+    assert jnp.all(bart.accept >= 0)
+    assert jnp.all(bart.accept <= 1)
+    assert jnp.any(bart.accept > 0)  # check the test is not vacuous
 
 
 def test_leaf_unit(bkw: BartKW) -> None:

@@ -425,6 +425,22 @@ class mc_gbart(Module):
         return self._yhat_test
 
     @cached_property
+    def accept(
+        self,
+    ) -> (
+        Float32[Array, ' nskip_plus_ndpost']
+        | Float32[Array, 'nskip_plus_ndpost_per_core mc_cores']
+    ):
+        """The fraction of trees with an accepted move, including burn-in samples.
+
+        Unlike BART3, the iterations thinned away by `keepevery` are not
+        recorded.
+        """
+        # `Bart.accept` is (mc_cores, samples) or (samples,); the public layout
+        # is (samples, mc_cores), like `sigma`
+        return self._bart.accept.T
+
+    @cached_property
     def prob_test(self) -> Float32[Array, 'ndpost m'] | None:
         """The posterior probability of y being True at `x_test` for each MCMC iteration."""
         if self._yhat_test is None or self._mcmc_state.z is None:

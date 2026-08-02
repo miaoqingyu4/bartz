@@ -991,8 +991,10 @@ def gen_params(
     sigma2_lin = cast(Float[Array, ''], sigma2_lin)
     sigma2_quad = cast(Float[Array, ''], sigma2_quad)
     sigma2_eps = cast(Float[Array, ''], sigma2_eps)
-    offset = cast(Float[Array, ''] | Float[Array, ' k'], offset)
     het_strength = cast(Float[Array, ''] | None, het_strength)
+    # ...but jax does not trace an argument left at its default, and offset is
+    # the only non-None scalar default, so convert it for real
+    offset = jnp.asarray(offset)
 
     # offset is a scalar (shared shift) or a length-k vector (per-component); the
     # scalar/vector split is enforced by the type, the k consistency here

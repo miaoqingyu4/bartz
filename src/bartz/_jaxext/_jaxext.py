@@ -319,8 +319,8 @@ def truncated_normal_onesided(
     bound
         The truncation boundary.
     clip
-        Whether to clip the truncated uniform samples to (0, 1) before
-        transforming them to truncated normal. Intended for debugging purposes.
+        Whether to clip the samples to keep them finite and within the
+        truncation region. Leave on, off only for debugging.
 
     Returns
     -------
@@ -352,14 +352,27 @@ def truncated_normal_onesided(
     right_u = shift + scale * u  # ~ uniform in [ndtr(∓bound), 1)
     truncated_u = jnp.where(upper ^ bound_pos, left_u, right_u)
     if clip:
-        # on gpu the accuracy is lower and sometimes u can reach the boundaries
+        # `truncated_u` can reach 0 or 1, where ndtri is infinite: ndtr(±bound)
+        # underflows for extreme bounds, u can come out exactly 0, and on gpu the
+        # accuracy is lower. The lower target is the smallest normal number rather
+        # than the smallest subnormal one because xla flushes subnormals to zero on
+        # cpu, and ndtri is -inf on subnormals anyway.
         zero = jnp.zeros((), truncated_u.dtype)
         one = jnp.ones((), truncated_u.dtype)
-        truncated_u = jnp.clip(
-            truncated_u, jnp.nextafter(zero, one), jnp.nextafter(one, zero)
-        )
+        smallest_normal = jnp.finfo(truncated_u.dtype).smallest_normal
+        truncated_u = jnp.clip(truncated_u, smallest_normal, jnp.nextafter(one, zero))
     truncated_norm = ndtri(truncated_u)
-    return jnp.where(bound_pos, -truncated_norm, truncated_norm)
+    sample = jnp.where(bound_pos, -truncated_norm, truncated_norm)
+    if clip:
+        # the clip above caps |sample| at ndtri of the target, ~12.9 in float32,
+        # which for extreme bounds falls short of the truncation region, and
+        # rounding can put the sample a ulp on the wrong side anyway. Move it onto
+        # the boundary, where the distribution concentrates for such bounds (its
+        # mean is bound + 1/bound).
+        sample = jnp.where(
+            upper, jnp.minimum(sample, bound), jnp.maximum(sample, bound)
+        )
+    return sample
 
 
 def get_default_device() -> Device:
