@@ -317,9 +317,7 @@ update-other-deps:
 	# update(check = TRUE) returns TRUE only when nothing is left to update,
 	# and status() that the library and lockfile agree.
 	Rscript -e 'renv::update(prompt = FALSE); renv::snapshot(prompt = FALSE); stopifnot(isTRUE(renv::update(check = TRUE)), renv::status()$$synchronized)'
-	# --freeze pins revs to commit SHAs (tags are mutable). A hook held back for
-	# compatibility (see its note in .pre-commit-config.yaml) is re-pinned by
-	# reverting the hunk by hand; this runs once per release, so no automation.
+	# --freeze pins revs to commit SHAs (tags are mutable)
 	$(UV_RUN) pre-commit autoupdate --freeze
 
 .PHONY: update-oldest-deps

@@ -63,11 +63,7 @@ repos:
     hooks:
       - id: pydoclint
   - repo: https://github.com/henryiii/validate-pyproject-schema-store
-    # pinned: 2026.07.20 ships a uv.json
-    # schema that crashes validate-pyproject's generated validator
-    # (UnboundLocalError: data_keys); unpin once a later release validates
-    # our pyproject.toml cleanly
-    rev: 46fe0a3a97aa67cc4a63ad76d99f9fcdebfb5cb4  # frozen: 2026.07.17
+    rev: a011ac2729a668fd92c470a44476f340ad234404  # frozen: 2026.08.15
     hooks:
       - id: validate-pyproject
   - repo: https://github.com/jorisroovers/gitlint
