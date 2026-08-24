@@ -43,7 +43,7 @@ The config file is a JSONC document like:
             "resid_reduction": [                    // reduction slot: one entry per kind
                 {"kind": "batched", "num_batches": [null, 1, 8, 64]},
                 {"kind": "onehot", "method": ["matmul", "multiply"]},
-                "pallas"                            // short for {"kind": "pallas"}
+                "autoonehot"                        // short for {"kind": "autoonehot"}
             ],
             "sequential_unroll":  [1, 2, 4],
             "num_chains":         [null, 4]
@@ -108,7 +108,6 @@ from bartz.mcmcstep import (
     AutoOneHotReduction,
     BatchedReduction,
     OneHotReduction,
-    PallasReduction,
     ReductionConfig,
     State,
     Wishart,
@@ -116,7 +115,6 @@ from bartz.mcmcstep import (
     make_p_nonterminal,
     step,
 )
-from bartz.mcmcstep._reduction import _ceil_pow2
 from bartz.testing import gen_data
 
 # Rough element-count budgets used by `ConfigParams.is_valid` to skip
@@ -272,27 +270,6 @@ def _encode_knob(value: Any) -> Any:  # noqa: ANN401
         return -2
     else:
         return value
-
-
-def _pallas_is_valid(cfg: PallasReduction, n: int) -> bool:
-    """Whether `cfg` runs on the default device with `n` datapoints."""
-    device = get_default_device()
-    if cfg.backend == 'cpu':
-        if device.platform != 'cpu':
-            return False
-    elif device.platform != 'gpu':
-        return False
-    if cfg.backend == 'default':
-        # Mosaic GPU lowers only on Hopper+ (compute capability 9.0)
-        cc = getattr(device, 'compute_capability', None)
-        if cc is None or float(cc) < 9.0:
-            return False
-    if isinstance(cfg.block_size, int):
-        if cfg.block_size > _ceil_pow2(n):
-            return False
-        if device.platform == 'gpu' and cfg.block_size & (cfg.block_size - 1):
-            return False
-    return not (isinstance(cfg.num_blocks, int) and not 1 <= cfg.num_blocks <= n)
 
 
 @dataclass(frozen=True)
@@ -489,7 +466,7 @@ class ConfigParams:
             if rows * 2**self.maxdepth * self.n > MAX_ONEHOT_SIZE:
                 return False
 
-        # num_batches / pallas-device validity, applied to every site
+        # num_batches validity, applied to every site
         sites = (self.resid_reduction, self.count_reduction, self.prec_reduction)
         return all(self._reduction_is_valid(cfg) for cfg in sites)
 
@@ -497,8 +474,6 @@ class ConfigParams:
         """Whether `cfg`'s device/shape constraints hold for this combination."""
         if isinstance(cfg, BatchedReduction):
             return not (isinstance(cfg.num_batches, int) and cfg.num_batches > self.n)
-        elif isinstance(cfg, PallasReduction):
-            return _pallas_is_valid(cfg, self.n)
         else:
             return True
 

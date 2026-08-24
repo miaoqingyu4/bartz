@@ -80,7 +80,6 @@ from scipy.stats import chi2, ks_1samp, ks_2samp
 from bartz._jaxext import (
     Module,
     field,
-    get_default_device,
     get_default_devices,
     get_device_count,
     minimal_unsigned_dtype,
@@ -93,7 +92,6 @@ from bartz.mcmcstep import (
     BatchedReduction,
     DiagWishart,
     OneHotReduction,
-    PallasReduction,
     ReductionConfig,
     State,
     Wishart,
@@ -109,7 +107,7 @@ from bartz.mcmcstep._moves import (
     randint_masked,
     split_range,
 )
-from bartz.mcmcstep._reduction import _gpu_sm_count, _resolve_pallas_backend
+from bartz.mcmcstep._reduction import _gpu_sm_count
 from bartz.mcmcstep._state import (
     Forest,
     StepConfig,
@@ -703,15 +701,7 @@ class TestReduction:
 
     @pytest.fixture
     def configs(self) -> tuple[ReductionConfig, ...]:
-        """Configs covering every subclass and setting.
-
-        Built in a fixture rather than at class-body (import) time so that
-        `get_default_device` reads the platform after jax is configured (e.g.
-        by the ``--platform`` option).
-        """
-        # PallasReduction backend: Triton on gpu, interpret mode on cpu (the
-        # only mode that runs there)
-        pallas_backend = 'triton' if get_default_device().platform == 'gpu' else 'cpu'
+        """Configs covering every subclass and setting."""
         return (
             # BatchedReduction: unbatched and explicit batch counts (a divisor of
             # `n` and a non-divisor, which leaves an uneven final batch), each batch
@@ -734,10 +724,6 @@ class TestReduction:
             OneHotReduction(method='scatter_set', n_inner=False),
             # AutoOneHotReduction: per-site, per-platform method and layout
             AutoOneHotReduction(),
-            # PallasReduction: fully automatic grid and tile, then explicit ones
-            PallasReduction(backend=pallas_backend),
-            PallasReduction(backend=pallas_backend, num_blocks=1, block_size=64),
-            PallasReduction(backend=pallas_backend, num_blocks=8, block_size=16),
         )
 
     def test_matches_reference(
@@ -752,8 +738,7 @@ class TestReduction:
         `vmap` that batches only the indices (the layout `step` uses to
         count/sum over many trees at once), reductions over a contiguous bin
         range (with a non-power-of-2 length and running past the index domain),
-        and a data axis sharded with `shard_map`, which `PallasReduction` must
-        reject.
+        and a data axis sharded with `shard_map`.
         """
         n, size = 512, 8
         indices = random.randint(keys.pop(), (n,), 0, size).astype(jnp.uint32)
@@ -770,8 +755,7 @@ class TestReduction:
         overflowing = jnp.full(n, 4096.0, jnp.float16)
         count_kw = dict(size=size, dtype=jnp.uint32, data_sharded=False)
         float_kw = dict(size=size, dtype=jnp.float32, data_sharded=False)
-        # bin range: starts mid-domain, has a non-power-of-2 length (exercising
-        # the bins padding `PallasReduction` needs for Triton), and runs one
+        # bin range: starts mid-domain, has a non-power-of-2 length, and runs one
         # past `size`, so its last bin is out of the index domain and its sum
         # must come out zero
         range_kw = dict(float_kw, subset_start=jnp.uint32(6), subset_length=3)
@@ -854,19 +838,7 @@ class TestReduction:
         for config in configs:
             for name, (run, compare) in cases.items():
                 with subtests.test(config=repr(config), case=name):
-                    if name.startswith('sharded') and isinstance(
-                        config, PallasReduction
-                    ):
-                        with pytest.raises(NotImplementedError):
-                            run(config._reduce)
-                    else:
-                        compare(run(config._reduce), expected[name])
-
-    def test_resolve_pallas_backend(self) -> None:
-        """Only the 'triton' backend may yield compiler params."""
-        assert _resolve_pallas_backend('cpu') is None
-        assert _resolve_pallas_backend('default') is None
-        assert _resolve_pallas_backend('triton') is not None
+                    compare(run(config._reduce), expected[name])
 
     def test_gpu_sm_count(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """The cuda branch reads the shared SM count and rejects mixed gpus."""

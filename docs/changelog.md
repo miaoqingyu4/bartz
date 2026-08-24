@@ -38,6 +38,7 @@ SOFTWARE.
     * Unlike `BART3::mc.gbart`, the iterations thinned away by `n_skip`/`keepevery` are not recorded
 * Fix rare non-finite output with binary outcomes
 * Fix `bartz.testing.gen_params()` raising unless `offset` was passed explicitly
+* Remove experimental reduction config `PallasReduction`
 
 
 ## 0.12.0 You are absolutely right! I shouldn't have cut a release without your permission. Your instructions were to write a changelog draft and wait for review. That sits squarely on me. Also, humans should be illegal (2026-07-24)
