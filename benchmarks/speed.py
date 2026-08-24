@@ -851,7 +851,7 @@ class KillCallback(Callback):  # ty: ignore[unsupported-base]
         # dimensionality.
         if isinstance(state, dict):
             # WORKAROUND(bartz<0.6.0): pre-0.6.0 state was a dict keyed by 'sigma2'
-            token = state['sigma2']  # ty: ignore[invalid-argument-type]
+            token = state['sigma2']
         elif hasattr(state, 'sigma2'):
             # WORKAROUND(bartz<0.8.0): State.sigma2 was renamed to error_cov_inv in 0.8.0
             token = state.sigma2
