@@ -70,6 +70,11 @@ repos:
     rev: acc9d9de6369b76d22cb4167029d2035e8730b98 # frozen: v0.19.1
     hooks:
       - id: gitlint # this is already defined to run in stage commit-msg
+  # this rev is the single uv pin: .github/actions/setup-uv installs the version
+  # in its `frozen` comment in every workflow, and config/check_workarounds.py
+  # reads it as the oldest supported uv, so the uv that writes uv.lock here and
+  # the one that reads it on ci cannot drift apart. Both parse the comment on
+  # the line right below the repo, keep it there.
   - repo: https://github.com/astral-sh/uv-pre-commit
     rev: b84c4a0a90bd58c7d82ae8f0d4d5e77b1ddd3ce6  # frozen: 0.12.5
     hooks:
