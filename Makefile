@@ -52,7 +52,7 @@ COOLDOWN_DAYS = 7
 # define command to run python with oldest supported dependencies
 # OLD_DATE / OLD_DELAY_DAYS / BUMP_PYTHON_VERSION_DATE / NUM_SUPPORTED_PYTHON_RELEASES
 # drive the `update-oldest-deps` policy.
-OLD_DATE = 2025-07-24T00:00:00Z
+OLD_DATE = 2025-08-23T00:00:00Z
 OLD_DELAY_DAYS = 365
 BUMP_PYTHON_VERSION_DATE = 10-31
 NUM_SUPPORTED_PYTHON_RELEASES = 5
@@ -317,9 +317,7 @@ update-other-deps:
 	# update(check = TRUE) returns TRUE only when nothing is left to update,
 	# and status() that the library and lockfile agree.
 	Rscript -e 'renv::update(prompt = FALSE); renv::snapshot(prompt = FALSE); stopifnot(isTRUE(renv::update(check = TRUE)), renv::status()$$synchronized)'
-	# --freeze pins revs to commit SHAs (tags are mutable). A hook held back for
-	# compatibility (see its note in .pre-commit-config.yaml) is re-pinned by
-	# reverting the hunk by hand; this runs once per release, so no automation.
+	# --freeze pins revs to commit SHAs (tags are mutable)
 	$(UV_RUN) pre-commit autoupdate --freeze
 
 .PHONY: update-oldest-deps

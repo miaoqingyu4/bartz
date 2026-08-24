@@ -25,6 +25,7 @@
 """Test properties of pytest itself or other utilities."""
 
 from functools import partial
+from types import SimpleNamespace
 
 import pytest
 from jax import config, debug_nans, jit, random
@@ -33,13 +34,25 @@ from jax.errors import KeyReuseError
 from jaxtyping import Array, Float, Key, Shaped
 
 from bartz._jaxext import split
-from tests.util import assert_allclose, assert_array_equal
+from tests import util
+from tests.util import assert_allclose, assert_array_equal, rerun_on_gpu
 
 
 def test_assert_allclose_rejects_non_scalars() -> None:
     """Check `assert_allclose` rejects non-scalar inputs by default."""
     with pytest.raises(AssertionError, match='requires scalar inputs'):
         assert_allclose(jnp.zeros(2), jnp.zeros(2))
+
+
+@pytest.mark.parametrize(('platform', 'expected'), [('cpu', False), ('gpu', True)])
+def test_rerun_on_gpu(
+    platform: str, expected: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Check the flaky rerun filter asks for a retry only on gpu."""
+    monkeypatch.setattr(
+        util, 'get_default_device', lambda: SimpleNamespace(platform=platform)
+    )
+    assert rerun_on_gpu(None, None, None, None) is expected
 
 
 @pytest.fixture

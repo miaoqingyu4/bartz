@@ -44,7 +44,11 @@ from numpy.testing import assert_array_equal as _np_assert_array_equal  # noqa: 
 from numpy.typing import ArrayLike
 from scipy import linalg, stats
 
-from bartz._jaxext import jaxtyping_disabled, minimal_unsigned_dtype  # noqa: F401
+from bartz._jaxext import (  # noqa: F401
+    get_default_device,
+    jaxtyping_disabled,
+    minimal_unsigned_dtype,
+)
 from bartz.grove import TreesTrace, check_trace, describe_error
 
 _T = TypeVar('_T')
@@ -110,6 +114,15 @@ def condf(array: Float[ArrayLike, '...'], on_32: _T, on_16: _T) -> _T:
     """
     reduced = jnp.finfo(jnp.asarray(array).dtype).bits < 32
     return on_16 if reduced else on_32
+
+
+def rerun_on_gpu(*_: object) -> bool:
+    """Rerun filter for `pytest.mark.flaky` that retries a test only on gpu.
+
+    Use it for tests made flaky by gpu nondeterminism; on cpu they are
+    reproducible, so retrying there would only hide intermittent failures.
+    """
+    return get_default_device().platform == 'gpu'
 
 
 def assert_close_matrices(

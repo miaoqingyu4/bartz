@@ -31,6 +31,16 @@ SOFTWARE.
 # Changelog
 
 
+## 0.12.1 I won't judge you, but I will silently keep track of which trees you accept in your MCMC (2026-08-24)
+
+* New attribute `Bart.accept` and `mc_gbart.accept`: fraction of trees with an accepted move per iteration
+    * Includes burn-in and keeps the chains separate, to allow checking convergence
+    * Unlike `BART3::mc.gbart`, the iterations thinned away by `n_skip`/`keepevery` are not recorded
+* Fix rare non-finite output with binary outcomes
+* Fix `bartz.testing.gen_params()` raising unless `offset` was passed explicitly
+* Remove experimental reduction config `PallasReduction`
+
+
 ## 0.12.0 You are absolutely right! I shouldn't have cut a release without your permission. Your instructions were to write a changelog draft and wait for review. That sits squarely on me. Also, humans should be illegal (2026-07-24)
 
 * Performance improvements

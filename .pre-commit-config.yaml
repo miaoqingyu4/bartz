@@ -45,7 +45,7 @@ repos:
         # an explicit `pre-commit run --files`
         exclude: src/bartz/_version\.py$
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: cb8c523fd4835aba42af70f4cad5568db4df0b6c  # frozen: v0.16.0
+    rev: aab412d509121cb5f7533134b7e67f9fab59c682  # frozen: v0.16.4
     hooks:
       - id: ruff-check
         args: [--fix]
@@ -63,19 +63,20 @@ repos:
     hooks:
       - id: pydoclint
   - repo: https://github.com/henryiii/validate-pyproject-schema-store
-    # pinned: 2026.07.20 ships a uv.json
-    # schema that crashes validate-pyproject's generated validator
-    # (UnboundLocalError: data_keys); unpin once a later release validates
-    # our pyproject.toml cleanly
-    rev: 46fe0a3a97aa67cc4a63ad76d99f9fcdebfb5cb4  # frozen: 2026.07.17
+    rev: a011ac2729a668fd92c470a44476f340ad234404  # frozen: 2026.08.15
     hooks:
       - id: validate-pyproject
   - repo: https://github.com/jorisroovers/gitlint
     rev: acc9d9de6369b76d22cb4167029d2035e8730b98 # frozen: v0.19.1
     hooks:
       - id: gitlint # this is already defined to run in stage commit-msg
+  # this rev is the single uv pin: .github/actions/setup-uv installs the version
+  # in its `frozen` comment in every workflow, and config/check_workarounds.py
+  # reads it as the oldest supported uv, so the uv that writes uv.lock here and
+  # the one that reads it on ci cannot drift apart. Both parse the comment on
+  # the line right below the repo, keep it there.
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: e3e6ef7d9bda544b2e795782dbd7d2a4fbd7eb6d  # frozen: 0.11.32
+    rev: b84c4a0a90bd58c7d82ae8f0d4d5e77b1ddd3ce6  # frozen: 0.12.5
     hooks:
       - id: uv-lock
   - repo: https://github.com/rhysd/actionlint

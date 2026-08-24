@@ -139,6 +139,7 @@ from tests.util import (
     condf,
     nnone,
     periodic_sigint,
+    rerun_on_gpu,
     rhat_rank,
 )
 
@@ -3683,6 +3684,8 @@ def test_get_error_sdev_values(bkw: BartKW) -> None:
     assert_close_matrices(sdev, sdev_ref, rtol=1e-5)
 
 
+@pytest.mark.flaky(max_runs=5, rerun_filter=rerun_on_gpu)
+# see `assert_identical_bart`
 def test_devices_platform(bkw: BartKW) -> None:
     """Check that passing `devices='cpu'/'gpu'` ends up on the expected device."""
     bart1 = Bart(**bkw.kw)
@@ -3695,7 +3698,13 @@ def test_devices_platform(bkw: BartKW) -> None:
 
 
 def assert_identical_bart(bart1: OriginalBart, bart2: OriginalBart) -> None:
-    """Check that two `Bart` objects are equal."""
+    """Check that two `Bart` objects are equal.
+
+    On gpu the mcmc is not deterministic at fixed seed because of scatter-adds.
+    In ~20% of cases in a certain unit test, two bart runs would diverge. When
+    using this comparison function, consider marking the test as
+    `flaky(rerun_filter=rerun_on_gpu)`.
+    """
 
     def check_same(
         path: KeyPath, x1: Shaped[Array, '*shape'], x2: Shaped[Array, '*shape']
@@ -3721,6 +3730,8 @@ def assert_identical_bart(bart1: OriginalBart, bart2: OriginalBart) -> None:
     assert treedef1 == treedef2
 
 
+@pytest.mark.flaky(max_runs=5, rerun_filter=rerun_on_gpu)
+# see `assert_identical_bart`
 def test_numpy_input(bkw: BartKW) -> None:
     """Check if all numerical inputs are numpy arrays, everything works as usual."""
     bart1 = Bart(**bkw.kw)
