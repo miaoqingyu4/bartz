@@ -819,10 +819,10 @@ class Config:
         if extra:
             msg = f'config {path}: "plot" has unknown keys: {sorted(extra)}'
             raise ValueError(msg)
-        if not isinstance(plot['scan'], str):  # ty: ignore[invalid-argument-type]
+        if not isinstance(plot['scan'], str):
             msg = f'config {path}: "plot.scan" must be a string'
             raise TypeError(msg)
-        if not isinstance(plot['reduce'], str):  # ty: ignore[invalid-argument-type]
+        if not isinstance(plot['reduce'], str):
             msg = f'config {path}: "plot.reduce" must be a string'
             raise TypeError(msg)
 
