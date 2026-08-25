@@ -1945,8 +1945,8 @@ def _determine_mesh(
         if num_data_devices is not None:
             mesh.update(data=num_data_devices)
         mesh = make_mesh(
-            axis_shapes=tuple(mesh.values()),
-            axis_names=tuple(mesh),
+            tuple(mesh.values()),
+            tuple(mesh),
             axis_types=(AxisType.Auto,) * len(mesh),
             devices=devices,
         )
