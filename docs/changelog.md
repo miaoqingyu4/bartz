@@ -31,7 +31,7 @@ SOFTWARE.
 # Changelog
 
 
-## 0.12.1 I won't judge you, but I will silently keep track of which trees you accept in your MCMC (2026-08-24)
+## 0.12.1 I won't judge you, but I will silently keep track of which trees you accept in your MCMC (2026-08-25)
 
 * New attribute `Bart.accept` and `mc_gbart.accept`: fraction of trees with an accepted move per iteration
     * Includes burn-in and keeps the chains separate, to allow checking convergence
