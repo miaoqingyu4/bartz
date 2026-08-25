@@ -31,13 +31,15 @@ SOFTWARE.
 # Changelog
 
 
-## 0.12.1 I won't judge you, but I will silently keep track of which trees you accept in your MCMC (2026-08-24)
+## 0.12.1 I won't judge you, but I will silently keep track of which trees you accept in your MCMC (2026-08-25)
 
 * New attribute `Bart.accept` and `mc_gbart.accept`: fraction of trees with an accepted move per iteration
     * Includes burn-in and keeps the chains separate, to allow checking convergence
     * Unlike `BART3::mc.gbart`, the iterations thinned away by `n_skip`/`keepevery` are not recorded
-* Fix rare non-finite output with binary outcomes
-* Fix `bartz.testing.gen_params()` raising unless `offset` was passed explicitly
+* Bug fixes
+    * Fix rare non-finite output with binary outcomes
+    * Fix `bartz.testing.gen_params()` raising unless `offset` was passed explicitly
+    * Fix compatibility bug with jax 0.11.1 that crashed `Bart`
 * Remove experimental reduction config `PallasReduction`
 
 
