@@ -48,6 +48,7 @@ Contents
     changelog.md
     development.rst
     pkglist.md
+    authors.md
 
 * :ref:`genindex`
 * :ref:`search`
