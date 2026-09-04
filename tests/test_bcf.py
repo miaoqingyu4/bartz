@@ -391,14 +391,14 @@ class TestBcf:
         sigma2_st = model_st.global_var_samples
 
         mean_tau_jax = np.mean(preds_matched_tau_scaled, axis=1)
-        mean_tau_st = np.mean(model_st.tau_hat_train, axis=0)
+        mean_tau_st = np.mean(model_st.tau_hat_train, axis=1)
 
         mean_mu_jax = np.mean(preds_matched_mu_scaled, axis=1)
-        mean_mu_st = np.mean(model_st.mu_hat_train, axis=0)
+        mean_mu_st = np.mean(model_st.mu_hat_train, axis=1)
 
-        rhat_sigma2 = _rhat_two_chains(sigma2_jax, sigma2_st)
-        rhat_mean_tau = _rhat_two_chains(mean_tau_jax, mean_tau_st)
-        rhat_mean_mu = _rhat_two_chains(mean_mu_jax, mean_mu_st)
+        rhat_sigma2 = _rhat_two_chains(sigma2_jax[:, None], sigma2_st[:, None])[0]
+        rhat_mean_tau = _rhat_two_chains(mean_tau_jax[:, None], mean_tau_st[:, None])[0]
+        rhat_mean_mu = _rhat_two_chains(mean_mu_jax[:, None], mean_mu_st[:, None])[0]
 
         print(f'max yhat rhat: {np.max(rhat_yhat):.4f}')
         print(f'95th perc tau rhat: {np.percentile(rhat_tau_jax, 95):.4f}')
@@ -545,7 +545,9 @@ class TestBcf:
             - b_z * (new_state.tau_0 + tau_fit_raw)
         )
 
-        assert_allclose(new_state.resid, expected_resid, atol=1e-5)
+        assert_allclose(
+            new_state.resid, expected_resid, atol=1e-5, allow_non_scalar=True
+        )
 
     def test_bcf_unsplittable_x_reduction(self) -> None:
         """Verifies BCF degenerates to Bayesian linear regression when max_split is 0."""
@@ -670,10 +672,7 @@ class TestBcf:
             preds_jax['tau'] * y_std
         ) * b_z_jax
 
-        yhat_st = model_st.y_hat_train
-
-        yhat_jax = yhat_jax.T
-        yhat_st = model_st.y_hat_train
+        yhat_st = model_st.y_hat_train.T
 
         rhat_mean_yhat = _rhat_two_chains(yhat_jax, yhat_st)
 
@@ -843,13 +842,11 @@ class TestBcf:
         yhat_jax = (preds_jax['mu'] * y_std + y_mean) + (
             preds_jax['tau'] * y_std
         ) * b_z_jax
-        yhat_jax = yhat_jax.T
-
-        yhat_st = model_st.y_hat_train
+        yhat_st = model_st.y_hat_train.T
         rhat_mean_yhat = _rhat_two_chains(yhat_jax, yhat_st)
 
-        bartz_tau = (preds_jax['tau'] * y_std).T
-        stoch_tau = model_st.tau_hat_train
+        bartz_tau = preds_jax['tau'] * y_std
+        stoch_tau = model_st.tau_hat_train.T
         rhat_tau = _rhat_two_chains(bartz_tau, stoch_tau)
 
         y_var = np.var(y_train)
